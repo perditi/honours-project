@@ -13,20 +13,20 @@ def get_root_dir():
             ROOT_DIR = Path.cwd().parent
     return ROOT_DIR
 
-def get_images():
+def get_images(force=False):
     if IMAGES_FOLDER_PATH == None:
-        import_images_labels()
+        import_images_labels(force)
     return IMAGES_FOLDER_PATH
 
-def get_labels():
+def get_labels(force=False):
     if LABELS_PATH == None:
-        import_images_labels()
+        import_images_labels(force)
     return LABELS_PATH
 
-def import_images_labels():
+def import_images_labels(force):
     global LABELS_PATH, IMAGES_FOLDER_PATH
 
-    p = Path(kh.dataset_download(handle='williamscott701/memotion-dataset-7k'))/'memotion_dataset_7k'
+    p = Path(kh.dataset_download(handle='williamscott701/memotion-dataset-7k', force_download=force))/'memotion_dataset_7k'
     LABELS_PATH = p/'labels.csv'
     IMAGES_FOLDER_PATH = p/'images'
     return LABELS_PATH, IMAGES_FOLDER_PATH
