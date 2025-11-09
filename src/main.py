@@ -11,5 +11,5 @@ if __name__ == '__main__':
     # print(test.loc[test['image_name'] == 'image_2.jpeg']['text_corrected'].iloc[0])
 
 
-    img_embeds, text_embeds = models.get_embeddings(util.get_images(), util.get_labels(), overwrite=True, test_cap=10)
+    img_embeds, text_embeds = models.get_embeddings(util.get_images(), util.get_labels(), overwrite=True)
     print(img_embeds.shape, text_embeds.shape)
