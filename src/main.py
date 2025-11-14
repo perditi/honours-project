@@ -11,5 +11,8 @@ if __name__ == '__main__':
     # print(test.loc[test['image_name'] == 'image_2.jpeg']['text_corrected'].iloc[0])
 
 
-    img_embeds, text_embeds = models.get_embeddings(util.get_images(), util.get_labels())
-    print(img_embeds.shape, text_embeds.shape)
+    img_embeds, text_inputs = models.get_embeddings(util.get_images(), util.get_labels(), overwrite=False)
+    print(img_embeds.shape, text_inputs)
+
+    cls = models.feed_VisualBERT(img_embeds, text_inputs, overwrite = True)
+    print(cls.shape)
