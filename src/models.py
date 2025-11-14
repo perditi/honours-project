@@ -77,14 +77,29 @@ def get_embeddings(img_path:Path, labels_path:Path, overwrite=False, test_cap=0)
     img_in = processor(images=imgs, return_tensors='pt')
     text_in = tokenizer(text=texts, padding=True, truncation=True, return_tensors='pt')
 
+    img_embeds, text_embeds = None, None
     with torch.no_grad(): # save computation power and memory
         # get em
-        img_embeds = clip_model.get_image_features(**img_in)
+        img_embeds = clip_model.vision_model(**img_in).last_hidden_state
         text_embeds = clip_model.get_text_features(**text_in)
-        # save em
-        torch.save(img_embeds, data_path/"image_embeddings.pt")
-        torch.save(text_embeds, data_path/"text_embeddings.pt")
-        # return em
-        return img_embeds, text_embeds
+    if img_embeds == None or text_embeds == None: raise Exception('embeds not correctly generated')
+    # save em
+    torch.save(img_embeds, data_path/"image_embeddings.pt")
+    torch.save(text_embeds, data_path/"text_embeddings.pt")
+    # return em
+    return img_embeds, text_embeds
 
+def feed_VisualBERT(visual_embeds, text_embeds):
+    visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.long
+                                       )
+    visual_token_type_ids = torch.ones_like(visual_attention_mask)
+    outputs = vb_model(
+        input_ids=text_embeds["input_ids"],
+        attention_mask=text_embeds["attention_mask"],
+        token_type_ids=text_embeds.get("token_type_ids"),
+        visual_embeds=visual_embeds,
+        visual_attention_mask=visual_attention_mask,
+        visual_token_type_ids=visual_token_type_ids
+    )
 
+    return outputs.pooler_output 
