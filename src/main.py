@@ -14,5 +14,5 @@ if __name__ == '__main__':
     img_embeds, text_inputs = models.get_embeddings(util.get_images(), util.get_labels(), overwrite=False)
     print(img_embeds.shape, text_inputs)
 
-    cls = models.feed_VisualBERT(img_embeds, text_inputs, overwrite = True)
-    print(cls.shape)
+    cls = models.feed_VisualBERT(img_embeds, text_inputs, overwrite = False)
+    util.calc_cosine_sims(3,cls)

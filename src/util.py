@@ -1,6 +1,7 @@
 import kagglehub as kh
 import os
 from pathlib import Path
+import pandas as pd
 
 ROOT_DIR, LABELS_PATH, IMAGES_FOLDER_PATH = None, None, None
 
@@ -30,3 +31,24 @@ def import_images_labels(force):
     LABELS_PATH = p/'labels.csv'
     IMAGES_FOLDER_PATH = p/'images'
     return LABELS_PATH, IMAGES_FOLDER_PATH
+
+def temp_cosine_sim_func(x,y):
+    return None
+
+def calc_cosine_sims(img, all_embeds):
+    index = None
+    print('hiiii')
+    big_data = pd.read_csv(ROOT_DIR/"data"/"big_data.csv")
+    if type(img) == int:
+        index = img
+        img = all_embeds[img]
+    else:
+        index = big_data.loc[big_data["img_name"]==img].index
+        img = all_embeds[index]
+    print(big_data["img_name"][index])
+    return
+    sim_values = []
+    for i in range(len(all_embeds)):
+        sim_values.append(temp_cosine_sim_func(img, all_embeds[i]))
+    #big_data.assign(cosine_sim=sim_values)
+    #big_data.head()

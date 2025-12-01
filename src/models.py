@@ -56,7 +56,7 @@ def get_embeddings(img_path:Path, labels_path:Path, overwrite=False, test_cap=0)
             _, NUM_PATCHES, _ = img_embeds.shape
             _, TEXT_SEQUENCE_LENGTH = text_in['input_ids'].shape
             return img_embeds, text_in
-        
+    big_data = {"img_name":[]} # we need the image names in order so we know which embeds are for which image
     imgs = []
     texts = []
     labels = pd.read_csv(labels_path)
@@ -82,6 +82,7 @@ def get_embeddings(img_path:Path, labels_path:Path, overwrite=False, test_cap=0)
                 else:
                     txt = str(txt)
             texts.append(txt)
+            big_data["img_name"].append(file.name)
         except Exception as e:
             print(f"had an error boyo, with {file}, {e}")
             print(traceback.format_exc())
@@ -108,6 +109,7 @@ def get_embeddings(img_path:Path, labels_path:Path, overwrite=False, test_cap=0)
     # save em
     torch.save(img_embeds, data_path/"image_embeddings.pt")
     torch.save(text_in, data_path/"text_inputs.pt")
+    pd.DataFrame(big_data).to_csv(data_path/"big_data.csv", index=False)
     # return em
     return img_embeds, text_in
 
@@ -117,12 +119,10 @@ def feed_VisualBERT(img_embeds, text_inputs, overwrite = False):
     data_path = get_root_dir() / 'data'
     if overwrite == False:
         if (data_path / 'visualbert_output.pt').exists(): 
-            return torch.load(data_path / 'visualbert_output.pt').last_hidden_state[:, 0]
+            return torch.load(data_path / 'visualbert_output.pt')
 
     dataset = VBDataset(projected_img_embeds, text_inputs)
     loader = DataLoader(dataset, batch_size=16, shuffle=False)
-
-   
 
     vb_model.to(DEVICE)
     vb_model.eval()
