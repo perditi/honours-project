@@ -2,6 +2,7 @@ import kagglehub as kh
 import os
 from pathlib import Path
 import pandas as pd
+import math
 
 ROOT_DIR, LABELS_PATH, IMAGES_FOLDER_PATH = None, None, None
 
@@ -32,8 +33,24 @@ def import_images_labels(force):
     IMAGES_FOLDER_PATH = p/'images'
     return LABELS_PATH, IMAGES_FOLDER_PATH
 
-def temp_cosine_sim_func(x,y):
-    return None
+def cosine_similarity(d, q):
+    '''Input: two array-likes of the same length
+    Output: the cosine similarity between the two'''
+    if len(d) != len(q):
+        raise Exception(f"Both inputs for cosine similarity must be the same length, found length {len(d)} and length {len(q)}")
+    return dot_product(d,q)/(magnitude(d)*magnitude(q))
+    
+def dot_product(a, b):
+    result = 0
+    for i in range(len(a)):
+        result += (a[i]*b[i])
+    return result
+
+def magnitude(a):
+    result = 0
+    for v in a:
+        result += v**2
+    return math.sqrt(result)
 
 def calc_cosine_sims(img, all_embeds):
     index = None
@@ -49,6 +66,6 @@ def calc_cosine_sims(img, all_embeds):
     return
     sim_values = []
     for i in range(len(all_embeds)):
-        sim_values.append(temp_cosine_sim_func(img, all_embeds[i]))
+        sim_values.append(cosine_similarity(img, all_embeds[i]))
     #big_data.assign(cosine_sim=sim_values)
     #big_data.head()
