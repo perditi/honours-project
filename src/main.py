@@ -1,6 +1,7 @@
 import util
 import models
 import pandas as pd
+import torch
 
 if __name__ == '__main__':
     print(util.get_root_dir())
@@ -15,4 +16,5 @@ if __name__ == '__main__':
     print(img_embeds.shape, text_inputs)
 
     cls = models.feed_VisualBERT(img_embeds, text_inputs, overwrite = False)
-    util.calc_cosine_sims(3,cls)
+    #util.calc_cosine_sims(3,cls) # cosine sim on fused embeds
+    #util.calc_cosine_sims(3,torch.load(util.get_root_dir() / 'data' / 'image_embeddings.pt').mean(dim=1)) # cosine sim on image embeds

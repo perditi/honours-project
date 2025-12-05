@@ -35,7 +35,7 @@ def import_images_labels(force):
 
 def cosine_similarity(d, q):
     '''Input: two array-likes of the same length
-    Output: the cosine similarity between the two'''
+    Output: the cosine similarity between the two (1 is identical, 0 is orthogonal, -1 is opposites)'''
     if len(d) != len(q):
         raise Exception(f"Both inputs for cosine similarity must be the same length, found length {len(d)} and length {len(q)}")
     return dot_product(d,q)/(magnitude(d)*magnitude(q))
@@ -63,9 +63,10 @@ def calc_cosine_sims(img, all_embeds):
         index = big_data.loc[big_data["img_name"]==img].index
         img = all_embeds[index]
     print(big_data["img_name"][index])
-    return
     sim_values = []
     for i in range(len(all_embeds)):
         sim_values.append(cosine_similarity(img, all_embeds[i]))
-    #big_data.assign(cosine_sim=sim_values)
-    #big_data.head()
+    big_data['cosine_sim'] = sim_values
+    big_data = big_data.sort_values('cosine_sim', ascending=False)
+    for index, row in big_data.head(11).iterrows():
+        print(f'{row['img_name']} ({row['cosine_sim']})')
