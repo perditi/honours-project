@@ -60,12 +60,18 @@ def calc_cosine_sims(img, all_embeds):
         index = img
         img = all_embeds[img]
     else:
-        index = big_data.loc[big_data["img_name"]==img].index
+        index = big_data.loc[big_data["img_name"]==img].index.values[0]
         img = all_embeds[index]
     print(big_data["img_name"][index])
     sim_values = []
-    for i in range(len(all_embeds)):
+    total = len(all_embeds)
+    progress_check = 0.05*total
+    last_prog = 0
+    for i in range(total):
         sim_values.append(cosine_similarity(img, all_embeds[i]))
+        if i//progress_check > last_prog: # for my cheeky little progress bar
+            print(f'{i*100.0/total:.2f}% ({i}/{total})')
+            last_prog = i//progress_check
     big_data['cosine_sim'] = sim_values
     big_data = big_data.sort_values('cosine_sim', ascending=False)
     for index, row in big_data.head(11).iterrows():
