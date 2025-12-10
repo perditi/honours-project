@@ -99,7 +99,7 @@ def get_bert_sentiment(generated=False, overwrite=False, test_cap=0):
     if you run this without training bert i'm actually going to kill you (i'm obv not going to actually kill you i'm just a comment in code)
     '''
     data_path = get_root_dir() / 'data'
-    big_data = pd.read_csv(data_path/'big_data.csv')
+    big_data = pd.read_csv(data_path/'big_data.csv', keep_default_na=False)
     captions = list(big_data['caption'])
     if test_cap > 0:
         total_len = len(captions)
@@ -113,7 +113,7 @@ def get_bert_sentiment(generated=False, overwrite=False, test_cap=0):
     # get the label ID (0-5)
     predicted_labels = torch.argmax(logits, dim=1).cpu().tolist()
     if test_cap > 0:
-        predicted_labels += [np.nan for i in range(test_cap, total_len)]
+        predicted_labels += [np.nan for i in range(total_len - test_cap)]
     big_data['caption_sentiment'] = predicted_labels
 
     if generated:
@@ -125,7 +125,7 @@ def get_bert_sentiment(generated=False, overwrite=False, test_cap=0):
             logits = bert_model(**inputs).logits
         predicted_labels = torch.argmax(logits, dim=1).tolist()
         if test_cap > 0:
-            predicted_labels += [np.nan for i in range(test_cap, total_len)]
+            predicted_labels += [np.nan for i in range(total_len - test_cap)]
         big_data['description_sentiment'] = predicted_labels
 
     big_data.to_csv(data_path/"big_data.csv", index=False)
