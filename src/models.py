@@ -180,6 +180,7 @@ def feed_BLIP(img_path, overwrite=False, test_cap=0):
     :param overwrite: forces new files to be made even. if false, will retrieve already existing files (if they exist)
     :param test_cap: will process all images in path unless specified to end early (mainly for testing purposes)
     '''
+    print("starting BLIP")
     data_path = get_root_dir() / 'data'
     if overwrite == False: # if not forcing an overwrite, grab existing files
         if (data_path / 'big_data.csv').exists():
@@ -191,17 +192,26 @@ def feed_BLIP(img_path, overwrite=False, test_cap=0):
     print("hello")
     big_data = pd.read_csv(data_path/'big_data.csv')
     text_descriptions = []
-    batch_size = 16
-    i = 0
+    batch_size = 32
+    prompt_text = "A photo of"
+    forbidden_phrases = [
+        "with text that says",
+        "with text that reads",
+        "with the capt that reads",
+        "with the capt that says",
+        "and the words",
+        "with the words"
+    ]
+    bad_words_ids = [blip_processor.tokenizer.encode(p, add_special_tokens=False) for p in forbidden_phrases]
     total = len(IMAGES_LIST)
 
     for i in range(0, total, batch_size):
         batch_images = IMAGES_LIST[i : i + batch_size]
-        blip_in = blip_processor(images=batch_images, return_tensors="pt", padding=True).to(DEVICE)
-        blip_out = blip_model.generate(**blip_in, max_new_tokens=50,num_beams=5,repetition_penalty=1.2,early_stopping=True)
+        batch_prompts = [prompt_text] * len(batch_images)
+        blip_in = blip_processor(images=batch_images, text=batch_prompts, return_tensors="pt", padding=True).to(DEVICE)
+        blip_out = blip_model.generate(**blip_in, max_new_tokens=50,num_beams=5,no_repeat_ngram_size=2,repetition_penalty=1.5,early_stopping=True, bad_words_ids=bad_words_ids)
         captions = [blip_processor.decode(out, skip_special_tokens=True) for out in blip_out]
         text_descriptions += captions
-        i += batch_size
         print(f'{i*100.0/total:.2f}% ({i}/{total})')
     big_data['text_descriptions'] = text_descriptions
     pd.DataFrame(big_data).to_csv(data_path/"big_data.csv", index=False)

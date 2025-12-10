@@ -54,7 +54,7 @@ def magnitude(a):
 
 def calc_cosine_sims(img, all_embeds):
     index = None
-    print('hiiii')
+    print('starting cosine sim')
     big_data = pd.read_csv(ROOT_DIR/"data"/"big_data.csv")
     if type(img) == int:
         index = img
@@ -76,3 +76,4 @@ def calc_cosine_sims(img, all_embeds):
     big_data = big_data.sort_values('cosine_sim', ascending=False)
     for index, row in big_data.head(11).iterrows():
         print(f'{row['img_name']} ({row['cosine_sim']})')
+        print(row['text_descriptions'])
