@@ -19,13 +19,16 @@ if __name__ == '__main__':
     print('sentiment analysis???')
     models.get_bert_sentiment(overwrite=fuuuuckmebro)
 
-    cls = models.feed_VisualBERT(img_embeds, text_inputs, overwrite = fuuuuckmebro)
+    cls = models.feed_VisualBERT(img_embeds, text_inputs, p='proj', overwrite = fuuuuckmebro)
+    # proj / padded bc we have two of these
 
     models.feed_BLIP(util.get_images(), overwrite=False)
-    util.calc_cosine_sims('image_5996.jpg',cls) # cosine sim on fused embeds
-    util.calc_cosine_sims('image_6012.jpg',cls)
-    util.calc_cosine_sims('image_4506.jpg',cls)
-    util.calc_cosine_sims('image_1000.jpg',cls)
+    # util.calc_cosine_sims('image_5996.jpg',cls) # cosine sim on fused embeds
+    # util.calc_cosine_sims('image_6012.jpg',cls)
+    # util.calc_cosine_sims('image_4506.jpg',cls)
+    # util.calc_cosine_sims('image_1000.png',cls)
+
+    util.cluster_and_copy('image_4506.jpg',cls,0.9845)
     #util.calc_cosine_sims(3,torch.load(util.get_root_dir() / 'data' / 'image_embeddings.pt').mean(dim=1)) # cosine sim on image embeds
 
     
