@@ -3,8 +3,10 @@ import os
 from pathlib import Path
 import pandas as pd
 import math
+import torch
 
-ROOT_DIR, LABELS_PATH, IMAGES_FOLDER_PATH = None, None, None
+
+ROOT_DIR, LABELS_PATH, IMAGES_FOLDER_PATH, EMOTIONS_PATH = None, None, None, None
 
 def get_root_dir():
     global ROOT_DIR
@@ -25,6 +27,11 @@ def get_labels(force=False):
         import_images_labels(force)
     return LABELS_PATH
 
+def get_emotions(force=False):
+    if EMOTIONS_PATH == None:
+        import_emotions(force)
+    return EMOTIONS_PATH
+
 def import_images_labels(force):
     global LABELS_PATH, IMAGES_FOLDER_PATH
 
@@ -32,6 +39,12 @@ def import_images_labels(force):
     LABELS_PATH = p/'labels.csv'
     IMAGES_FOLDER_PATH = p/'images'
     return LABELS_PATH, IMAGES_FOLDER_PATH
+
+def import_emotions(force):
+    global EMOTIONS_PATH
+    p = Path(kh.dataset_download(handle='nelgiriyewithana/emotions', force_download=force))
+    EMOTIONS_PATH = p/'text.csv'
+    return EMOTIONS_PATH
 
 def cosine_similarity(d, q):
     '''Input: two array-likes of the same length
@@ -76,4 +89,8 @@ def calc_cosine_sims(img, all_embeds):
     big_data = big_data.sort_values('cosine_sim', ascending=False)
     for index, row in big_data.head(11).iterrows():
         print(f'{row['img_name']} ({row['cosine_sim']})')
-        print(row['text_descriptions'])
+        print(row['description'])
+    print(f'There are {big_data[big_data['cosine_sim'] >= 0.99].shape[0]} images with cosine_sim >= 0.99')
+    print(f'There are {big_data[big_data['cosine_sim'] >= 0.95].shape[0]} images with cosine_sim >= 0.95')
+    print(f'There are {big_data[big_data['cosine_sim'] >= 0.9].shape[0]} images with cosine_sim >= 0.9')
+    print(f'There are {big_data[big_data['cosine_sim'] >= 0.8].shape[0]} images with cosine_sim >= 0.8')

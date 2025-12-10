@@ -1,28 +1,32 @@
-from transformers import BertTokenizer, BertModel, CLIPModel, CLIPImageProcessor, VisualBertModel, BlipProcessor, BlipForConditionalGeneration
-from PIL import Image, ImageFile
+from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments, CLIPModel, CLIPImageProcessor, VisualBertModel, BlipProcessor, BlipForConditionalGeneration
+from PIL import Image
 import torch
 from torch.utils.data import DataLoader
+from datasets import Dataset
 import pandas as pd
 from pathlib import Path
 import os
-from util import get_root_dir
+from util import get_root_dir, get_labels
 import traceback
 import numpy as np
+from sklearn.model_selection import train_test_split
+
+RANDOM_SEED_FUCKING_THING = 69
 
 # ImageFile.LOAD_TRUNCATED_IMAGES = True #for some reason, every image in the memotion dataset is corrupted so i need to do this otherwise it won't work
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased") # for text tokenizing
-bert_model = BertModel.from_pretrained("bert-base-uncased").to(DEVICE) # for embeds
+bert_model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=6).to(DEVICE) # for text sentiment anal
 
 processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32") # for image processing
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(DEVICE) # for imbeddings
 
-vb_model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
+vb_model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre").to(DEVICE)
 
 # for img2text
 blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(DEVICE)
 
 NUM_PATCHES = None
 TEXT_SEQUENCE_LENGTH = None
@@ -43,15 +47,99 @@ class VBDataset(torch.utils.data.Dataset):
             "input_ids": self.text_inputs["input_ids"][idx],
             "attention_mask": self.text_inputs["attention_mask"][idx],
         }
+    
+def train_bert(emotions_path:Path, overwrite=False):
+    print(DEVICE)
+    model_path = get_root_dir() / 'modelaudaonadum'
+    if overwrite == False: 
+        if (model_path / 'the_trained_bert_weights.pt').exists():
+            bert_model.load_state_dict(torch.load(model_path / 'the_trained_bert_weights.pt'))
+            bert_model.to(DEVICE)
+            return
+    df = pd.read_csv(emotions_path)
+    train_df, eval_df = train_test_split(df, test_size=0.1, shuffle=True, random_state=RANDOM_SEED_FUCKING_THING)
+
+    train_dataset = Dataset.from_pandas(train_df)
+    eval_dataset = Dataset.from_pandas(eval_df)
+    def tokenize_function(examples):
+        return tokenizer(examples["text"], padding="max_length", truncation=True, max_length=128)
+    tokenized_train = train_dataset.map(tokenize_function, batched=True)
+    tokenized_eval = eval_dataset.map(tokenize_function, batched=True)
+    
+    training_args = TrainingArguments(
+        output_dir=str(model_path/'results'),
+        num_train_epochs=3,
+        per_device_train_batch_size=16,
+        per_device_eval_batch_size=64,
+        warmup_steps=500,
+        weight_decay=0.01,
+        logging_dir=str(model_path/'logs'),
+        logging_steps=10,
+        eval_strategy="epoch",
+        seed=RANDOM_SEED_FUCKING_THING
+    )
+    trainer = Trainer(
+        model=bert_model,
+        args=training_args,
+        train_dataset=tokenized_train,
+        eval_dataset=tokenized_eval
+    )
+    print("starting training")
+    trainer.train()
+
+    print("saving weights")
+    torch.save(bert_model.state_dict(), model_path/'the_trained_bert_weights.pt')
+    return
+
+def get_bert_sentiment(generated=False, overwrite=False, test_cap=0):
+    ''' if generated=False, will only sentiment analysis on captions.
+    if generated=True, will sentiment analysis on generated text descriptions from BLIP as well
+    don't run with generated=True unless BLIP text descriptions are in big_data.csv or i'll be very very mad >:(
+    this also assumes bert was trained (i.e. train_bert was run before)
+    if you run this without training bert i'm actually going to kill you (i'm obv not going to actually kill you i'm just a comment in code)
+    '''
+    data_path = get_root_dir() / 'data'
+    big_data = pd.read_csv(data_path/'big_data.csv')
+    captions = list(big_data['caption'])
+    if test_cap > 0:
+        total_len = len(captions)
+        captions = captions[:test_cap]
+
+    inputs = tokenizer(captions, padding=True, truncation=True, return_tensors="pt").to(DEVICE)
+    bert_model.eval()
+    with torch.no_grad():
+        logits = bert_model(**inputs).logits
+    
+    # get the label ID (0-5)
+    predicted_labels = torch.argmax(logits, dim=1).cpu().tolist()
+    if test_cap > 0:
+        predicted_labels += [np.nan for i in range(test_cap, total_len)]
+    big_data['caption_sentiment'] = predicted_labels
+
+    if generated:
+        descriptions = list(big_data['description'])
+        if test_cap > 0:
+            descriptions = descriptions[:test_cap]
+        inputs = tokenizer(descriptions, padding=True, truncation=True, return_tensors="pt").to(DEVICE)
+        with torch.no_grad():
+            logits = bert_model(**inputs).logits
+        predicted_labels = torch.argmax(logits, dim=1).tolist()
+        if test_cap > 0:
+            predicted_labels += [np.nan for i in range(test_cap, total_len)]
+        big_data['description_sentiment'] = predicted_labels
+
+    big_data.to_csv(data_path/"big_data.csv", index=False)
+    return predicted_labels
+
 
 def get_embeddings(img_path:Path, labels_path:Path, img_only=False, overwrite=False, test_cap=0):
-    global NUM_PATCHES, TEXT_SEQUENCE_LENGTH, IMAGES_LIST
     ''' Saves embeddings as image_embeddings.pt and text input as text_inputs.pt
     will retrieve an already generated + saved .pt (if it exists) if overwrite = False, otherwise will generate a new .pt
     if test_cap > 0 , will only iterate thru that many files maximum (for testing purposes).
     img_only is for uhhhhh just generating the IMAGES_LIST constant mainly.
     Returns the image embeds and the text inputs
     '''
+    global NUM_PATCHES, TEXT_SEQUENCE_LENGTH, IMAGES_LIST
     data_path = get_root_dir() / 'data'
     if overwrite == False: # if not forcing an overwrite, grab existing files
         if (data_path / 'image_embeddings.pt').exists() and (data_path / 'text_inputs.pt').exists(): # ...if they exist
@@ -61,10 +149,9 @@ def get_embeddings(img_path:Path, labels_path:Path, img_only=False, overwrite=Fa
             _, NUM_PATCHES, _ = img_embeds.shape
             _, TEXT_SEQUENCE_LENGTH = text_in['input_ids'].shape
             return img_embeds, text_in
-    big_data = {"img_name":[]} # we need the image names in order so we know which embeds are for which image
+    big_data = {"img_name":[], "caption":[]} # we need the image names in order so we know which embeds are for which image
     imgs = []
-    texts = []
-    if not img_only: labels = pd.read_csv(labels_path)
+    labels = pd.read_csv(labels_path)
     i = 0 # for test_cap, for testing purposes
     total_images = len([file for file in os.listdir(img_path)]) if test_cap <= 0 else test_cap
     progress_check = 0.05*total_images # i want a progress check every 5% so i know it's not frozen
@@ -79,15 +166,14 @@ def get_embeddings(img_path:Path, labels_path:Path, img_only=False, overwrite=Fa
             img.load()
             imgs.append(img)
             #print("image appended")
-            if not img_only:
-                txt = labels.loc[labels['image_name'] == file.name]['text_corrected'].iloc[0]
-                if type(txt) != str:
-                    print(f"Found non-string \"{str(txt)}\" when searching for {file.name}, converting to string")
-                    if np.isnan(txt):
-                        txt = "" 
-                    else:
-                        txt = str(txt)
-                texts.append(txt)
+            txt = labels.loc[labels['image_name'] == file.name]['text_corrected'].iloc[0]
+            if type(txt) != str:
+                print(f"Found non-string \"{str(txt)}\" when searching for {file.name}, converting to string")
+                if np.isnan(txt):
+                    txt = "" 
+                else:
+                    txt = str(txt)
+            big_data["caption"].append(txt)
             big_data["img_name"].append(file.name)
         except Exception as e:
             print(f"had an error boyo, with {file}, {e}")
@@ -101,11 +187,11 @@ def get_embeddings(img_path:Path, labels_path:Path, img_only=False, overwrite=Fa
     IMAGES_LIST = imgs
     print("DONE")
     print(len(imgs))
-    print(len(texts))
+    print(len(big_data["caption"]))
 
     if not img_only:
         img_in = processor(images=imgs, return_tensors='pt').to(DEVICE)
-        text_in = tokenizer(text=texts, padding="max_length", max_length=512, truncation=True, return_tensors='pt').to(DEVICE)
+        text_in = tokenizer(text=big_data["caption"], padding="max_length", max_length=512, truncation=True, return_tensors='pt').to(DEVICE)
         text_in = {k: v for k, v in text_in.items()}
         img_embeds = None
         with torch.no_grad(): # save computation power and memory
@@ -124,14 +210,12 @@ def get_embeddings(img_path:Path, labels_path:Path, img_only=False, overwrite=Fa
         return
 
 def feed_VisualBERT(img_embeds, text_inputs, overwrite = False):
-    proj = torch.nn.Linear(768, 2048).to(DEVICE)
-    projected_img_embeds = proj(img_embeds)
     data_path = get_root_dir() / 'data'
     if overwrite == False:
         if (data_path / 'visualbert_output.pt').exists(): 
             return torch.load(data_path / 'visualbert_output.pt')
 
-    dataset = VBDataset(projected_img_embeds, text_inputs)
+    dataset = VBDataset(img_embeds, text_inputs)
     loader = DataLoader(dataset, batch_size=16, shuffle=False)
 
     vb_model.to(DEVICE)
@@ -143,8 +227,12 @@ def feed_VisualBERT(img_embeds, text_inputs, overwrite = False):
     all_outputs = []
     with torch.no_grad():
         for batch in loader:
-            imgs = batch["img"].to(DEVICE)
-            B = imgs.shape[0]
+            imgs_768 = batch["img"].to(DEVICE)
+            B = imgs_768.shape[0]
+
+            # pad the 768 shape from clip with 0s to match the 2048 shape that vbert wants -- this way we preserve data
+            padding = torch.zeros(B, imgs_768.shape[1], 1280).to(DEVICE)
+            imgs_2048 = torch.cat([imgs_768, padding], dim=2)
 
             token_type_ids = torch.zeros((B, TEXT_SEQUENCE_LENGTH), dtype=torch.long).to(DEVICE)
             visual_token_type_ids = torch.ones((B, NUM_PATCHES), dtype=torch.long).to(DEVICE)
@@ -155,7 +243,7 @@ def feed_VisualBERT(img_embeds, text_inputs, overwrite = False):
                 attention_mask=batch["attention_mask"].to(DEVICE),
                 token_type_ids=token_type_ids,
 
-                visual_embeds=imgs,
+                visual_embeds=imgs_2048,
                 visual_attention_mask=visual_attention_mask,
                 visual_token_type_ids=visual_token_type_ids
             )
@@ -188,7 +276,7 @@ def feed_BLIP(img_path, overwrite=False, test_cap=0):
             return text_descriptions
         
     if IMAGES_LIST == None:
-        get_embeddings(img_path, get_root_dir(), img_only=True, overwrite=True)
+        get_embeddings(img_path, get_labels(), img_only=True, overwrite=True)
     print("hello")
     big_data = pd.read_csv(data_path/'big_data.csv')
     text_descriptions = []
@@ -206,6 +294,8 @@ def feed_BLIP(img_path, overwrite=False, test_cap=0):
     total = len(IMAGES_LIST)
 
     for i in range(0, total, batch_size):
+        if test_cap > 0 and i >= test_cap:
+            break # for testing purposes
         batch_images = IMAGES_LIST[i : i + batch_size]
         batch_prompts = [prompt_text] * len(batch_images)
         blip_in = blip_processor(images=batch_images, text=batch_prompts, return_tensors="pt", padding=True).to(DEVICE)
@@ -213,7 +303,7 @@ def feed_BLIP(img_path, overwrite=False, test_cap=0):
         captions = [blip_processor.decode(out, skip_special_tokens=True) for out in blip_out]
         text_descriptions += captions
         print(f'{i*100.0/total:.2f}% ({i}/{total})')
-    big_data['text_descriptions'] = text_descriptions
+    big_data['description'] = text_descriptions
     pd.DataFrame(big_data).to_csv(data_path/"big_data.csv", index=False)
     
     return text_descriptions
